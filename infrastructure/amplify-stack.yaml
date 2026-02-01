@@ -9,7 +9,7 @@ Parameters:
   
   GitHubRepository:
     Type: String
-    Default: https://github.com/georgejohnisb/portfolio-website
+    Default: https://github.com/georgejohnis/portfolio-website
     Description: GitHub repository URL
   
   GitHubBranch:
@@ -23,6 +23,20 @@ Parameters:
     Description: GitHub personal access token (create at https://github.com/settings/tokens)
 
 Resources:
+  # IAM Role for Amplify
+  AmplifyRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: amplify.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AdministratorAccess-Amplify
+      
   # Route 53 Hosted Zone
   HostedZone:
     Type: AWS::Route53::HostedZone
@@ -38,6 +52,7 @@ Resources:
       Name: portfolio-website
       Repository: !Ref GitHubRepository
       AccessToken: !Ref GitHubToken
+      IAMServiceRole: !GetAtt AmplifyRole.Arn
       BuildSpec: |
         version: 1
         frontend:
