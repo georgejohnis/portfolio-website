@@ -1,0 +1,107 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'Portfolio Website - AWS Amplify + Route 53 Infrastructure'
+
+Parameters:
+  DomainName:
+    Type: String
+    Default: georgejohn.net
+    Description: Your custom domain name
+  
+  GitHubRepository:
+    Type: String
+    Default: https://github.com/georgejohnisb/portfolio-website
+    Description: GitHub repository URL
+  
+  GitHubBranch:
+    Type: String
+    Default: main
+    Description: GitHub branch to deploy
+  
+  GitHubToken:
+    Type: String
+    NoEcho: true
+    Description: GitHub personal access token (create at https://github.com/settings/tokens)
+
+Resources:
+  # Route 53 Hosted Zone
+  HostedZone:
+    Type: AWS::Route53::HostedZone
+    Properties:
+      Name: !Ref DomainName
+      HostedZoneConfig:
+        Comment: !Sub 'Hosted zone for ${DomainName}'
+
+  # Amplify App
+  AmplifyApp:
+    Type: AWS::Amplify::App
+    Properties:
+      Name: portfolio-website
+      Repository: !Ref GitHubRepository
+      AccessToken: !Ref GitHubToken
+      BuildSpec: |
+        version: 1
+        frontend:
+          phases:
+            build:
+              commands:
+                - echo "No build required for static site"
+          artifacts:
+            baseDirectory: /
+            files:
+              - '**/*'
+          cache:
+            paths: []
+      CustomRules:
+        - Source: '</^[^.]+$|\.(?!(css|gif|ico|jpg|js|png|txt|svg|woff|woff2|ttf|map|json|webp)$)([^.]+$)/>'
+          Target: '/index.html'
+          Status: '200'
+      EnvironmentVariables:
+        - Name: _LIVE_UPDATES
+          Value: '[{"name":"Node.js version","pkg":"node","type":"nvm","version":"18"}]'
+
+  # Amplify Branch (main/master)
+  AmplifyBranch:
+    Type: AWS::Amplify::Branch
+    Properties:
+      AppId: !GetAtt AmplifyApp.AppId
+      BranchName: !Ref GitHubBranch
+      EnableAutoBuild: true
+      EnablePullRequestPreview: false
+
+  # Custom Domain
+  AmplifyDomain:
+    Type: AWS::Amplify::Domain
+    Properties:
+      AppId: !GetAtt AmplifyApp.AppId
+      DomainName: !Ref DomainName
+      SubDomainSettings:
+        - Prefix: ''
+          BranchName: !GetAtt AmplifyBranch.BranchName
+        - Prefix: www
+          BranchName: !GetAtt AmplifyBranch.BranchName
+      EnableAutoSubDomain: false
+
+Outputs:
+  AmplifyAppId:
+    Description: Amplify App ID
+    Value: !GetAtt AmplifyApp.AppId
+    Export:
+      Name: !Sub '${AWS::StackName}-AmplifyAppId'
+  
+  AmplifyDefaultDomain:
+    Description: Amplify default domain (use this to test before custom domain)
+    Value: !Sub 'https://${GitHubBranch}.${AmplifyApp.DefaultDomain}'
+  
+  CustomDomainURL:
+    Description: Custom domain URL
+    Value: !Sub 'https://${DomainName}'
+  
+  HostedZoneId:
+    Description: Route 53 Hosted Zone ID
+    Value: !Ref HostedZone
+    Export:
+      Name: !Sub '${AWS::StackName}-HostedZoneId'
+  
+  NameServers:
+    Description: Name servers for your domain (update these at your domain registrar)
+    Value: !Join [', ', !GetAtt HostedZone.NameServers]
